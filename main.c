@@ -42,10 +42,15 @@ void sub_reg(uint16_t addr);
 void shift_right_reg(uint16_t addr);
 void sub_assign_reg(uint16_t addr);
 void shift_left_reg(uint16_t addr);
+void set_I(uint16_t addr);
+void jump_plus(uint16_t addr);
+void rand_reg(uint16_t addr);
+void draw(uint16_t addr);
 void clear_screen();
 
 uint16_t I;
 uint16_t pc = 0x200;
+uint8_t video[WIDTH][HEIGHT] = {0};
 uint8_t V[16];
 uint8_t memory[MEMORY_SIZE];
 uint16_t subroutines[16];
@@ -82,7 +87,7 @@ int main(int argc, char** argv)
     // Source for opcodes: https://en.wikipedia.org/wiki/CHIP-8#Opcode_table
 
     switch (opcode & 0xF000) // Binary AND with 0xF000 because it masks off the first 4 bytes of any instruction
-                             // For example let opcode=0x6A05. 0x6A05 & 0xF000 = 0110101000000101 & 1111000000000000 = 0110 = 0x6.               
+                             // For example let opcode=0x6A05. 0x6A05 & 0xF000 = 0110101000000101 & 1111000000000000 = 0110 = 0x6.
     {
     case 0x0:
         if(opcode & 0x00FF == 0xE0) {
@@ -146,6 +151,12 @@ int main(int argc, char** argv)
         }
     case 0xA:
         set_I(opcode & 0x0FFF);
+    case 0xB:
+        jump_plus(opcode & 0x0FFF);
+    case 0xC:
+        rand_reg(opcode & 0x0FFF);
+    case 0xD:
+        draw(opcode & 0x0FFF);
     }
 
     return 0;
@@ -195,6 +206,7 @@ void set_reg_val(uint16_t addr)
     uint8_t X = addr & 0xF00;
     uint16_t NN = addr & 0x0FF;
     V[X] = NN;
+    pc+=2;
 }
 
 void add_reg_val(uint16_t addr)
@@ -202,60 +214,68 @@ void add_reg_val(uint16_t addr)
     uint8_t X = addr & 0xF00;
     uint16_t NN = addr & 0x0FF;
     V[X] += NN;
+    pc+=2;
 }
 
 void set_reg(uint16_t addr)
 {
     uint8_t X = addr & 0xF00;
-    uint16_t Y = addr & 0x0F0;
+    uint8_t Y = addr & 0x0F0;
     V[X] = V[Y];
+    pc+=2;
 }
 
 void or_reg(uint16_t addr)
 {
     uint8_t X = addr & 0xF00;
-    uint16_t Y = addr & 0x0F0;
+    uint8_t Y = addr & 0x0F0;
     V[X] |= V[Y];
+    pc+=2;
 }
 
 void and_reg(uint16_t addr)
 {
     uint8_t X = addr & 0xF00;
-    uint16_t Y = addr & 0x0F0;
+    uint8_t Y = addr & 0x0F0;
     V[X] &= V[Y];
+    pc+=2;
 }
 
 void xor_reg(uint16_t addr)
 {
     uint8_t X = addr & 0xF00;
-    uint16_t Y = addr & 0x0F0;
+    uint8_t Y = addr & 0x0F0;
     V[X] ^= V[Y];
+    pc+=2;
 }
 
 void add_reg(uint16_t addr)
 {
     uint8_t X = addr & 0xF00;
-    uint16_t Y = addr & 0x0F0;
+    uint8_t Y = addr & 0x0F0;
     V[X] += V[Y];
+    pc+=2;
 }
 
 void sub_reg(uint16_t addr)
 {
     uint8_t X = addr & 0xF00;
-    uint16_t Y = addr & 0x0F0;
+    uint8_t Y = addr & 0x0F0;
     V[X] -= V[Y];
+    pc+=2;
 }
 
 void shift_right_reg(uint16_t addr)
 {
     uint8_t X = addr & 0xF00;
     V[X]>>=1;
+    pc+=2;
 }
 
 void sub_assign_reg(uint16_t addr)
 {
     uint8_t X = addr & 0xF00;
-    uint16_t Y = addr & 0x0F0;
+    uint8_t Y = addr & 0x0F0;
     V[X] = V[Y] - V[X];
 }
 
@@ -263,8 +283,55 @@ void shift_left_reg(uint16_t addr)
 {
     uint8_t X = addr & 0xF00;
     V[X]<<=1;
+    pc+=2;
+}
+
+void set_I(uint16_t addr)
+{
+    I = addr;
+}
+
+void jump_plus(uint16_t addr)
+{
+    pc = addr + V[0];
+}
+
+void rand_reg(uint16_t addr)
+{
+    uint8_t X = addr & 0xF00;
+    uint16_t NN = addr & 0x0FF;
+    V[X] = rand() & NN;
+    pc+=2;
+}
+
+void draw(uint16_t addr)
+{
+    uint8_t X = addr & 0xF00;
+    uint8_t Y = addr & 0x0F0;
+    uint8_t height = addr & 0x00F;
+    uint8_t x_pos = V[X] % WIDTH; // for wraping
+    uint8_t y_pos = V[Y] % HEIGHT;
+
+    V[0xF] = 0;
+    for(size_t i = 0; i < height; i++) {
+        uint8_t sprite_data = memory[I + i];
+
+        for(size_t j = 0; j < 8; j++) {
+            uint8_t sprite_pixel = (sprite_data >> j) & 0x1;
+            uint8_t* screen_pixel = &video[x_pos + j][y_pos + i];
+
+            if(sprite_pixel) {
+                if(*screen_pixel)
+                    V[0xF] = 1;
+                
+            }
+        }
+    }
+
+    draw(x_pos, y_pos, height);
 }
 
 void clear_screen()
 {
+
 }
