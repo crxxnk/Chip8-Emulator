@@ -91,13 +91,13 @@ int main(int argc, char** argv)
                              // For example let opcode=0x6A05. 0x6A05 & 0xF000 = 0110101000000101 & 1111000000000000 = 0110 = 0x6.
     {
     case 0x0:
-        if(opcode & 0x00FF == 0xE0) {
+        if((opcode & 0x00FF) == 0xE0) {
             clear_screen();
-        } else if (opcode & 0x00FF == 0xEE) {
+        } else if ((opcode & 0x00FF) == 0xEE) {
             pc = subroutines[sp];
             sp--;
         }
-        else printf("False instruction");
+        else printf("Invalid instruction");
     case 0x1:
         jump(opcode & 0x0FFF);
         break;
@@ -152,12 +152,72 @@ int main(int argc, char** argv)
         }
     case 0xA:
         set_I(opcode & 0x0FFF);
+        break;
     case 0xB:
         jump_plus(opcode & 0x0FFF);
+        break;
     case 0xC:
         rand_reg(opcode & 0x0FFF);
+        break;
     case 0xD:
         draw(opcode & 0x0FFF);
+        break;
+    case 0xE:
+        uint8_t X = ((opcode & 0x0FFF) >> 8) & 0xF;
+        if((opcode & 0x00FF) == 0x9E) {
+            if(key_pressed(V[X]))
+                pc+=4;
+            else pc+=2;
+        } else if((opcode & 0x00FF) == 0xA1) {
+            if(!key_pressed(V[X]))
+                pc+=4;
+            else pc+=2;
+        } else printf("Invalid instruction");
+        break;
+    case 0xF:
+        uint8_t X = ((opcode & 0x0FFF) >> 8) & 0xF;
+        switch (opcode & 0x00FF)
+        {
+            case 0x07:
+                V[X] = get_delay();
+                pc+=2;
+                break;
+            case 0x0A:
+                V[X] = get_key();
+                pc+=2;
+                break;
+            case 0x15:
+                set_delay_timer(V[X]);
+                pc+=2;
+                break;
+            case 0x18:
+                set_sound_timer(V[X]);
+                pc+=2;
+                break;
+            case 0x1E:
+                I += V[X];
+                if(I > 0xFFF)
+                    V[0xF] = 1;
+                else V[0xF] = 0;
+                pc+=2;
+                break;
+            case 0x29:
+                I = 0x50 + V[X] * 5; // V[X] * 5 because each character is 5 bytes tall
+                pc+=2;
+                break;
+            case 0x33:
+                uint8_t dig_1 = (uint8_t)(V[X] / 100);
+                uint8_t dig_2 = (uint8_t)(V[X] % 100 / 10);
+                uint8_t dig_3 = V[X] % 10;
+                memory[I] = dig_1;
+                memory[I+1] = dig_2;
+                memory[I+2] = dig_3;
+                pc+=2;
+                break;
+        }
+        break;
+    default:
+        printf("Invalid instruction");
     }
 
     return 0;
@@ -278,6 +338,7 @@ void sub_assign_reg(uint16_t addr)
     uint8_t X = (addr >> 8) & 0xF;
     uint8_t Y = (addr >> 4) & 0xF;
     V[X] = V[Y] - V[X];
+    pc+=2;
 }
 
 void shift_left_reg(uint16_t addr)
@@ -290,6 +351,7 @@ void shift_left_reg(uint16_t addr)
 void set_I(uint16_t addr)
 {
     I = addr;
+    pc+=2;
 }
 
 void jump_plus(uint16_t addr)
@@ -336,5 +398,10 @@ void draw(uint16_t addr)
 
 void clear_screen()
 {
+    for(size_t i = 0; i < WIDTH; i++) {
+        for(size_t j = 0; j < HEIGHT; j++)
+            video[i][j] = 0;
+    }
 
+    pc+=2;
 }
