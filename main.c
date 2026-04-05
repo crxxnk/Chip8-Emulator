@@ -77,6 +77,7 @@ int main(int argc, char** argv)
     fseek(file, 0, SEEK_SET);
     fread(&memory[0x200], 1, size, file);
     fclose(file);
+    srand(time(NULL));
 
     for(size_t i = 0; i < FONT_SIZE; i++) {
         memory[0x50 + i] = font[i]; // common to read font in 0x50
@@ -143,7 +144,7 @@ int main(int argc, char** argv)
             shift_right_reg(opcode & 0x0FFF); // assign a register to another
             break;
         case 0x7:
-            sub_asign_reg(opcode & 0x0FFF); // assign a register to another
+            sub_assign_reg(opcode & 0x0FFF); // assign a register to another
             break;
         case 0xE:
             shift_left_reg(opcode & 0x0FFF); // assign a register to another
@@ -176,7 +177,7 @@ void call(uint16_t addr)
 
 void ske(uint16_t addr)
 {
-    uint8_t X = addr & 0xF00;
+    uint8_t X = (addr >> 8) & 0xF;
     uint16_t NN = addr & 0x0FF;
     if(V[X] == NN)
         pc+=4;
@@ -185,7 +186,7 @@ void ske(uint16_t addr)
 
 void skne(uint16_t addr)
 {
-    uint8_t X = addr & 0xF00;
+    uint8_t X = (addr >> 8) & 0xF;
     uint16_t NN = addr & 0x0FF;
     if(V[X] != NN)
         pc+=4;
@@ -194,8 +195,8 @@ void skne(uint16_t addr)
 
 void skre(uint16_t addr)
 {
-    uint8_t X = addr & 0xF00;
-    uint8_t Y = addr & 0x0F0;
+    uint8_t X = (addr >> 8) & 0xF;
+    uint8_t Y = (addr >> 4) & 0xF;
     if(V[X] != V[Y])
         pc+=4;
     else pc+=2;
@@ -203,7 +204,7 @@ void skre(uint16_t addr)
 
 void set_reg_val(uint16_t addr)
 {
-    uint8_t X = addr & 0xF00;
+    uint8_t X = (addr >> 8) & 0xF;
     uint16_t NN = addr & 0x0FF;
     V[X] = NN;
     pc+=2;
@@ -211,7 +212,7 @@ void set_reg_val(uint16_t addr)
 
 void add_reg_val(uint16_t addr)
 {
-    uint8_t X = addr & 0xF00;
+    uint8_t X = (addr >> 8) & 0xF;
     uint16_t NN = addr & 0x0FF;
     V[X] += NN;
     pc+=2;
@@ -219,69 +220,69 @@ void add_reg_val(uint16_t addr)
 
 void set_reg(uint16_t addr)
 {
-    uint8_t X = addr & 0xF00;
-    uint8_t Y = addr & 0x0F0;
+    uint8_t X = (addr >> 8) & 0xF;
+    uint8_t Y = (addr >> 4) & 0xF;
     V[X] = V[Y];
     pc+=2;
 }
 
 void or_reg(uint16_t addr)
 {
-    uint8_t X = addr & 0xF00;
-    uint8_t Y = addr & 0x0F0;
+    uint8_t X = (addr >> 8) & 0xF;
+    uint8_t Y = (addr >> 4) & 0xF;
     V[X] |= V[Y];
     pc+=2;
 }
 
 void and_reg(uint16_t addr)
 {
-    uint8_t X = addr & 0xF00;
-    uint8_t Y = addr & 0x0F0;
+    uint8_t X = (addr >> 8) & 0xF;
+    uint8_t Y = (addr >> 4) & 0xF;
     V[X] &= V[Y];
     pc+=2;
 }
 
 void xor_reg(uint16_t addr)
 {
-    uint8_t X = addr & 0xF00;
-    uint8_t Y = addr & 0x0F0;
+    uint8_t X = (addr >> 8) & 0xF;
+    uint8_t Y = (addr >> 4) & 0xF;
     V[X] ^= V[Y];
     pc+=2;
 }
 
 void add_reg(uint16_t addr)
 {
-    uint8_t X = addr & 0xF00;
-    uint8_t Y = addr & 0x0F0;
+    uint8_t X = (addr >> 8) & 0xF;
+    uint8_t Y = (addr >> 4) & 0xF;
     V[X] += V[Y];
     pc+=2;
 }
 
 void sub_reg(uint16_t addr)
 {
-    uint8_t X = addr & 0xF00;
-    uint8_t Y = addr & 0x0F0;
+    uint8_t X = (addr >> 8) & 0xF;
+    uint8_t Y = (addr >> 4) & 0xF;
     V[X] -= V[Y];
     pc+=2;
 }
 
 void shift_right_reg(uint16_t addr)
 {
-    uint8_t X = addr & 0xF00;
+    uint8_t X = (addr >> 8) & 0xF;
     V[X]>>=1;
     pc+=2;
 }
 
 void sub_assign_reg(uint16_t addr)
 {
-    uint8_t X = addr & 0xF00;
-    uint8_t Y = addr & 0x0F0;
+    uint8_t X = (addr >> 8) & 0xF;
+    uint8_t Y = (addr >> 4) & 0xF;
     V[X] = V[Y] - V[X];
 }
 
 void shift_left_reg(uint16_t addr)
 {
-    uint8_t X = addr & 0xF00;
+    uint8_t X = (addr >> 8) & 0xF;
     V[X]<<=1;
     pc+=2;
 }
@@ -298,7 +299,7 @@ void jump_plus(uint16_t addr)
 
 void rand_reg(uint16_t addr)
 {
-    uint8_t X = addr & 0xF00;
+    uint8_t X = (addr >> 8) & 0xF;
     uint16_t NN = addr & 0x0FF;
     V[X] = rand() & NN;
     pc+=2;
@@ -306,8 +307,8 @@ void rand_reg(uint16_t addr)
 
 void draw(uint16_t addr)
 {
-    uint8_t X = addr & 0xF00;
-    uint8_t Y = addr & 0x0F0;
+    uint8_t X = (addr >> 8) & 0xF;
+    uint8_t Y = (addr >> 4) & 0xF;
     uint8_t height = addr & 0x00F;
     uint8_t x_pos = V[X] % WIDTH; // for wraping
     uint8_t y_pos = V[Y] % HEIGHT;
@@ -318,17 +319,19 @@ void draw(uint16_t addr)
 
         for(size_t j = 0; j < 8; j++) {
             uint8_t sprite_pixel = (sprite_data >> j) & 0x1;
-            uint8_t* screen_pixel = &video[x_pos + j][y_pos + i];
+            uint8_t* screen_pixel = &video[(x_pos + j) % WIDTH][(y_pos + i) % HEIGHT];
 
             if(sprite_pixel) {
                 if(*screen_pixel)
                     V[0xF] = 1;
                 
+                *screen_pixel ^= 0xFF;
             }
         }
     }
 
-    draw(x_pos, y_pos, height);
+    //draw(x_pos, y_pos, height);
+    pc += 2;
 }
 
 void clear_screen()
