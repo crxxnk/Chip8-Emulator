@@ -1,6 +1,7 @@
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <raylib.h>
 
 #define MEMORY_SIZE 4096
 #define FONT_SIZE 80
@@ -26,6 +27,11 @@ uint8_t font[FONT_SIZE] = {
     0xF0, 0x80, 0xF0, 0x80, 0x80  // F
 };
 
+uint8_t delay_timer = 0;
+uint8_t sound_timer = 0;
+uint8_t opcode_reader_rate = 10;
+double last_timer_update = 0.0;
+
 void jump(uint16_t addr);
 void call(uint16_t addr);
 void ske(uint16_t addr);
@@ -47,6 +53,9 @@ void jump_plus(uint16_t addr);
 void rand_reg(uint16_t addr);
 void draw(uint16_t addr);
 void clear_screen();
+uint8_t get_delay();
+void set_delay_timer(uint8_t val);
+void set_sound_timer(uint8_t val);
 
 uint16_t I;
 uint16_t pc = 0x200;
@@ -83,142 +92,187 @@ int main(int argc, char** argv)
         memory[0x50 + i] = font[i]; // common to read font in 0x50
     }
 
-    uint16_t opcode = memory[pc] << 8 | memory[pc+1]; // shift the first instruction 8 bits to the left to add the second instruction so it can become one 16-bit block
-
+    
     // Source for opcodes: https://en.wikipedia.org/wiki/CHIP-8#Opcode_table
+    
+    InitWindow(800, 600, "Chip-8");
+    
+    SetTargetFPS(60);
 
-    switch (opcode & 0xF000) // Binary AND with 0xF000 because it masks off the first 4 bytes of any instruction
-                             // For example let opcode=0x6A05. 0x6A05 & 0xF000 = 0110101000000101 & 1111000000000000 = 0110 = 0x6.
-    {
-    case 0x0:
-        if((opcode & 0x00FF) == 0xE0) {
-            clear_screen();
-        } else if ((opcode & 0x00FF) == 0xEE) {
-            pc = subroutines[sp];
-            sp--;
+    last_timer_update = GetTime();
+    
+    while (!WindowShouldClose()) {
+        uint16_t opcode;
+        for(size_t i = 0; i < opcode_reader_rate; i++) {
+            opcode = memory[pc] << 8 | memory[pc+1]; // shift the first instruction 8 bits to the left to add the second instruction so it can become one 16-bit block
+            switch (opcode & 0xF000) // Binary AND with 0xF000 because it masks off the first 4 bytes of any instruction
+                                    // For example let opcode=0x6A05. 0x6A05 & 0xF000 = 0110101000000101 & 1111000000000000 = 0110 = 0x6.
+            {
+            case 0x0:
+                if((opcode & 0x00FF) == 0xE0) {
+                    clear_screen();
+                } else if ((opcode & 0x00FF) == 0xEE) {
+                    pc = subroutines[sp];
+                    sp--;
+                }
+                else printf("Invalid instruction");
+                break;
+            case 0x1:
+                jump(opcode & 0x0FFF);
+                break;
+            case 0x2:
+                call(opcode & 0x0FFF);
+                break;
+            case 0x3:
+                ske(opcode & 0x0FFF); // skip if equal
+                break;
+            case 0x4:
+                skne(opcode & 0x0FFF); // skip if not equal
+                break;
+            case 0x5:
+                skre(opcode & 0x0FFF); // skip if registers are equal
+                break;
+            case 0x6:
+                set_reg_val(opcode & 0x0FFF); // set register value
+                break;
+            case 0x7:
+                add_reg_val(opcode & 0x0FFF);
+                break;
+            case 0x8:
+                switch (opcode & 0x000F)
+                {
+                case 0x0:
+                    set_reg(opcode & 0x0FFF); // assign a register to another
+                    break;
+                case 0x1:
+                    or_reg(opcode & 0x0FFF); // assign a register to another
+                    break;
+                case 0x2:
+                    and_reg(opcode & 0x0FFF); // assign a register to another
+                    break;
+                case 0x3:
+                    xor_reg(opcode & 0x0FFF); // assign a register to another
+                    break;
+                case 0x4:
+                    add_reg(opcode & 0x0FFF); // assign a register to another
+                    break;
+                case 0x5:
+                    sub_reg(opcode & 0x0FFF); // assign a register to another
+                    break;
+                case 0x6:
+                    shift_right_reg(opcode & 0x0FFF); // assign a register to another
+                    break;
+                case 0x7:
+                    sub_assign_reg(opcode & 0x0FFF); // assign a register to another
+                    break;
+                case 0xE:
+                    shift_left_reg(opcode & 0x0FFF); // assign a register to another
+                    break;
+                }
+                break;
+            case 0x9:
+                uint8_t X = ((opcode & 0x0FFF) >> 8) & 0xF;
+                uint8_t Y = ((opcode & 0x0FFF) >> 4) & 0xF;
+                if(V[X] != V[Y])
+                    pc+=4;
+                else pc+=2;
+                break;
+            case 0xA:
+                set_I(opcode & 0x0FFF);
+                break;
+            case 0xB:
+                jump_plus(opcode & 0x0FFF);
+                break;
+            case 0xC:
+                rand_reg(opcode & 0x0FFF);
+                break;
+            case 0xD:
+                draw(opcode & 0x0FFF);
+                break;
+            case 0xE:
+                uint8_t X = ((opcode & 0x0FFF) >> 8) & 0xF;
+                if((opcode & 0x00FF) == 0x9E) {
+                    if(IsKeyPressed(V[X]))
+                        pc+=4;
+                    else pc+=2;
+                } else if((opcode & 0x00FF) == 0xA1) {
+                    if(!IsKeyPressed(V[X]))
+                        pc+=4;
+                    else pc+=2;
+                } else printf("Invalid instruction");
+                break;
+            case 0xF:
+                uint8_t X = ((opcode & 0x0FFF) >> 8) & 0xF;
+                switch (opcode & 0x00FF)
+                {
+                    case 0x07:
+                        V[X] = get_delay();
+                        pc+=2;
+                        break;
+                    case 0x0A:
+                        V[X] = GetKeyPressed();
+                        pc+=2;
+                        break;
+                    case 0x15:
+                        set_delay_timer(V[X]);
+                        pc+=2;
+                        break;
+                    case 0x18:
+                        set_sound_timer(V[X]);
+                        pc+=2;
+                        break;
+                    case 0x1E:
+                        I += V[X];
+                        if(I > 0xFFF)
+                            V[0xF] = 1;
+                        else V[0xF] = 0;
+                        pc+=2;
+                        break;
+                    case 0x29:
+                        I = 0x50 + V[X] * 5; // V[X] * 5 because each character is 5 bytes tall
+                        pc+=2;
+                        break;
+                    case 0x33:
+                        uint8_t dig_1 = (uint8_t)(V[X] / 100);
+                        uint8_t dig_2 = (uint8_t)(V[X] % 100 / 10);
+                        uint8_t dig_3 = V[X] % 10;
+                        memory[I] = dig_1;
+                        memory[I+1] = dig_2;
+                        memory[I+2] = dig_3;
+                        pc+=2;
+                        break;
+                    case 0x55:
+                        for (size_t i = 0; i <= X; i++)
+                            memory[I + i] = V[i];
+                        pc+=2;
+                        break;
+                }
+                break;
+            default:
+                printf("Invalid instruction");
+            }
         }
-        else printf("Invalid instruction");
-    case 0x1:
-        jump(opcode & 0x0FFF);
-        break;
-    case 0x2:
-        call(opcode & 0x0FFF);
-        break;
-    case 0x3:
-        ske(opcode & 0x0FFF); // skip if equal
-        break;
-    case 0x4:
-        skne(opcode & 0x0FFF); // skip if not equal
-        break;
-    case 0x5:
-        skre(opcode & 0x0FFF); // skip if registers are equal
-        break;
-    case 0x6:
-        set_reg_val(opcode & 0x0FFF); // set register value
-        break;
-    case 0x7:
-        add_reg_val(opcode & 0x0FFF);
-        break;
-    case 0x8:
-        switch (opcode & 0x000F)
-        {
-        case 0x0:
-            set_reg(opcode & 0x0FFF); // assign a register to another
-            break;
-        case 0x1:
-            or_reg(opcode & 0x0FFF); // assign a register to another
-            break;
-        case 0x2:
-            and_reg(opcode & 0x0FFF); // assign a register to another
-            break;
-        case 0x3:
-            xor_reg(opcode & 0x0FFF); // assign a register to another
-            break;
-        case 0x4:
-            add_reg(opcode & 0x0FFF); // assign a register to another
-            break;
-        case 0x5:
-            sub_reg(opcode & 0x0FFF); // assign a register to another
-            break;
-        case 0x6:
-            shift_right_reg(opcode & 0x0FFF); // assign a register to another
-            break;
-        case 0x7:
-            sub_assign_reg(opcode & 0x0FFF); // assign a register to another
-            break;
-        case 0xE:
-            shift_left_reg(opcode & 0x0FFF); // assign a register to another
-            break;
+        
+        if (GetTime() - last_timer_update >= 1.0 / 60.0) {
+            if (delay_timer > 0) delay_timer--;
+            if (sound_timer > 0) sound_timer--;
+            last_timer_update = GetTime();
         }
-    case 0xA:
-        set_I(opcode & 0x0FFF);
-        break;
-    case 0xB:
-        jump_plus(opcode & 0x0FFF);
-        break;
-    case 0xC:
-        rand_reg(opcode & 0x0FFF);
-        break;
-    case 0xD:
-        draw(opcode & 0x0FFF);
-        break;
-    case 0xE:
-        uint8_t X = ((opcode & 0x0FFF) >> 8) & 0xF;
-        if((opcode & 0x00FF) == 0x9E) {
-            if(key_pressed(V[X]))
-                pc+=4;
-            else pc+=2;
-        } else if((opcode & 0x00FF) == 0xA1) {
-            if(!key_pressed(V[X]))
-                pc+=4;
-            else pc+=2;
-        } else printf("Invalid instruction");
-        break;
-    case 0xF:
-        uint8_t X = ((opcode & 0x0FFF) >> 8) & 0xF;
-        switch (opcode & 0x00FF)
-        {
-            case 0x07:
-                V[X] = get_delay();
-                pc+=2;
-                break;
-            case 0x0A:
-                V[X] = get_key();
-                pc+=2;
-                break;
-            case 0x15:
-                set_delay_timer(V[X]);
-                pc+=2;
-                break;
-            case 0x18:
-                set_sound_timer(V[X]);
-                pc+=2;
-                break;
-            case 0x1E:
-                I += V[X];
-                if(I > 0xFFF)
-                    V[0xF] = 1;
-                else V[0xF] = 0;
-                pc+=2;
-                break;
-            case 0x29:
-                I = 0x50 + V[X] * 5; // V[X] * 5 because each character is 5 bytes tall
-                pc+=2;
-                break;
-            case 0x33:
-                uint8_t dig_1 = (uint8_t)(V[X] / 100);
-                uint8_t dig_2 = (uint8_t)(V[X] % 100 / 10);
-                uint8_t dig_3 = V[X] % 10;
-                memory[I] = dig_1;
-                memory[I+1] = dig_2;
-                memory[I+2] = dig_3;
-                pc+=2;
-                break;
+
+        BeginDrawing();
+        ClearBackground(BLACK);
+
+        for(size_t i = 0; i < WIDTH; i++) {
+            for(size_t j = 0; j < HEIGHT; j++) {
+                if(video[i][j])
+                    DrawRectangle(i * 10, j * 10, 10, 10, WHITE);
+            }
         }
-        break;
-    default:
-        printf("Invalid instruction");
+        
+        EndDrawing();
     }
+
+    CloseWindow();
 
     return 0;
 }
@@ -257,7 +311,7 @@ void skre(uint16_t addr)
 {
     uint8_t X = (addr >> 8) & 0xF;
     uint8_t Y = (addr >> 4) & 0xF;
-    if(V[X] != V[Y])
+    if(V[X] == V[Y])
         pc+=4;
     else pc+=2;
 }
@@ -392,7 +446,6 @@ void draw(uint16_t addr)
         }
     }
 
-    //draw(x_pos, y_pos, height);
     pc += 2;
 }
 
@@ -404,4 +457,19 @@ void clear_screen()
     }
 
     pc+=2;
+}
+
+uint8_t get_delay()
+{
+    return delay_timer;
+}
+
+void set_delay_timer(uint8_t val)
+{
+    delay_timer = val;
+}
+
+void set_sound_timer(uint8_t val)
+{
+    sound_timer = val;
 }
